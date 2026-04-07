@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, updateDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 // Firebase configuration from your console
@@ -110,6 +110,55 @@ export const deleteAsset = async (id) => {
   }
 };
 
+// Force delete specific problematic assets
+export const forceDeleteAssets = async (assetIds) => {
+  try {
+    console.log('Force deleting assets:', assetIds);
+    const results = [];
+    
+    for (const id of assetIds) {
+      try {
+        await deleteDoc(doc(db, 'assets', id));
+        results.push({ id, success: true });
+        console.log(`Force deleted asset: ${id}`);
+      } catch (error) {
+        results.push({ id, success: false, error: error.message });
+        console.error(`Failed to force delete asset ${id}:`, error);
+      }
+    }
+    
+    return { success: true, results };
+  } catch (error) {
+    console.error('Error in force delete:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Direct delete for specific Firebase document IDs
+export const deleteSpecificAssets = async () => {
+  try {
+    const specificIds = ['RRXCzrwW3neWZ3Fi8oY6', 'RMFo0o6VdJhVxJEssfGO'];
+    console.log('Deleting specific Firebase documents:', specificIds);
+    
+    const results = [];
+    for (const id of specificIds) {
+      try {
+        await deleteDoc(doc(db, 'assets', id));
+        results.push({ id, success: true });
+        console.log(`Successfully deleted Firebase document: ${id}`);
+      } catch (error) {
+        results.push({ id, success: false, error: error.message });
+        console.error(`Failed to delete Firebase document ${id}:`, error);
+      }
+    }
+    
+    return { success: true, results };
+  } catch (error) {
+    console.error('Error deleting specific assets:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export const getAssetHistory = async () => {
   try {
     const querySnapshot = await getDocs(collection(db, 'assetHistory'));
@@ -135,6 +184,132 @@ export const addAssetHistory = async (historyEntry) => {
     console.error('Error adding history:', error);
     return { success: false, error: error.message };
   }
+};
+
+// Get depreciation log
+export const getDepreciationLog = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'depreciationLog'));
+    const log = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    return { success: true, data: log };
+  } catch (error) {
+    console.error('Error fetching depreciation log:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Get transfers
+export const getTransfers = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'transfers'));
+    const transfers = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    return { success: true, data: transfers };
+  } catch (error) {
+    console.error('Error fetching transfers:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Get disposals
+export const getDisposals = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'disposals'));
+    const disposals = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    return { success: true, data: disposals };
+  } catch (error) {
+    console.error('Error fetching disposals:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Real-time listeners for cross-device synchronization
+export const subscribeToAssets = (callback) => {
+  const q = query(collection(db, 'assets'), orderBy('createdAt', 'desc'));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const assets = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    callback(assets);
+  }, (error) => {
+    console.error('Real-time assets listener error:', error);
+    callback(null, error);
+  });
+  
+  return unsubscribe;
+};
+
+export const subscribeToAssetHistory = (callback) => {
+  const q = query(collection(db, 'assetHistory'), orderBy('createdAt', 'desc'));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const history = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    callback(history);
+  }, (error) => {
+    console.error('Real-time history listener error:', error);
+    callback(null, error);
+  });
+  
+  return unsubscribe;
+};
+
+export const subscribeToDepreciationLog = (callback) => {
+  const q = query(collection(db, 'depreciation_log'), orderBy('createdAt', 'desc'));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const log = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    callback(log);
+  }, (error) => {
+    console.error('Real-time depreciation listener error:', error);
+    callback(null, error);
+  });
+  
+  return unsubscribe;
+};
+
+export const subscribeToTransfers = (callback) => {
+  const q = query(collection(db, 'transfers'), orderBy('createdAt', 'desc'));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const transfers = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    callback(transfers);
+  }, (error) => {
+    console.error('Real-time transfers listener error:', error);
+    callback(null, error);
+  });
+  
+  return unsubscribe;
+};
+
+export const subscribeToDisposals = (callback) => {
+  const q = query(collection(db, 'disposals'), orderBy('createdAt', 'desc'));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const disposals = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    callback(disposals);
+  }, (error) => {
+    console.error('Real-time disposals listener error:', error);
+    callback(null, error);
+  });
+  
+  return unsubscribe;
 };
 
 export { app, db, auth };

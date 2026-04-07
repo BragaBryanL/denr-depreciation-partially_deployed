@@ -133,7 +133,7 @@ export async function generateCOAExcel(asset, depreciationData) {
     
     // J11-L11: Rate of Depreciation
     setCellValue('J11', 'Rate of Depreciation:');
-    setCellValue('K11', asset.rateOfDepreciation || asset.depreciationRate || (asset.usefulLife ? (100 / asset.usefulLife).toFixed(2) : '-'));
+    setCellValue('K11', asset.depreciationRate || '');
     setCellValue('L11', '');
     
     // J12-L12: spaces
@@ -305,7 +305,7 @@ export function generateCOAHTML(asset, depreciationData) {
         </td>
         <td style='border: none; text-align: center;'>
           <p style='margin: 0; font-style: italic;'>Appendix 70</p>
-          <p style='margin: 0; font-weight: bold; font-size: 14pt;'>PROPERTY LEDGER CARD</p>
+          <p style='margin: 0; font-weight: bold; font-size: 14pt;'>PROPERTY, PLANT AND EQUIPMENT LEDGER CARD</p>
           <p style='margin: 0;'>(COA Form No. I-A-2)</p>
         </td>
         <td style='width: 50px; border: none;'></td>
@@ -324,7 +324,7 @@ export function generateCOAHTML(asset, depreciationData) {
         <td style='border: 1px solid black;' colspan='4'>
           <span class='bold'>Object Account Code:</span> ${asset.accountCode || ''}<br>
           <span class='bold'>Estimated Useful Life:</span> ${asset.usefulLife || ''} years<br>
-          <span class='bold'>Rate of Depreciation:</span> ${asset.rateOfDepreciation || asset.depreciationRate || (asset.usefulLife ? (100 / asset.usefulLife).toFixed(2) + '%' : '-')}
+          <span class='bold'>Rate of Depreciation:</span> ${asset.depreciationRate ? asset.depreciationRate + '%' : '-'}
         </td>
       </tr>
     </table>
@@ -393,4 +393,3 @@ export function generateCOAHTML(asset, depreciationData) {
   
   return html;
 }
-

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ppeClassesData, officesData, fundClusters, calculateDepreciation } from "./data/ppeClasses";
 import { showNotification } from "./utils/notificationHelpers";
-import { saveAsset, updateAsset } from "./firebase";
+import { saveAsset, updateAsset, deleteAsset as deleteAssetFromFirebase, addAssetHistory } from "./firebase";
 import { CalculatorIcon, CalendarIcon, DocumentTextIcon, BuildingOfficeIcon, ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 
 export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
@@ -30,13 +30,10 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
   const [entityName, setEntityName] = useState("DENR - PENRO");
   const [fundCluster, setFundCluster] = useState("Regular Agency Fund");
   const [propertyNumber, setPropertyNumber] = useState("");
-  const [propertyType, setPropertyType] = useState("Property");
   const [office, setOffice] = useState("");
   const [ppeClass, setPpeClass] = useState("");
   const [description, setDescription] = useState("");
   const [dateAcquired, setDateAcquired] = useState("");
-  const [reference, setReference] = useState("");
-  const [receipt, setReceipt] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [unitCost, setUnitCost] = useState("");
 
@@ -69,13 +66,10 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
       setEntityName(asset.entityName || "DENR - Provincial Environment and Natural Resources Office (PENRO)");
       setFundCluster(asset.fundCluster || "Regular Agency Fund");
       setPropertyNumber(asset.propertyNumber || "");
-      setPropertyType(asset.propertyType || "");
       setOffice(asset.office || "");
       setPpeClass(asset.ppeClass || "");
       setDescription(asset.description || "");
       setDateAcquired(asset.dateAcquired || "");
-      setReference(asset.reference || "");
-      setReceipt(asset.receipt || "");
       setQuantity(asset.quantity || 1);
       setUnitCost(asset.unitCost?.toString() || "");
       setAccountCode(asset.accountCode || "");
@@ -235,10 +229,6 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
       newErrors.propertyNumber = "Please enter a Property Number";
       if (!firstErrorField) firstErrorField = "propertyNumber";
     }
-    if (!propertyType) {
-      newErrors.propertyType = "Please select a Property Type";
-      if (!firstErrorField) firstErrorField = "propertyType";
-    }
     if (!office) {
       newErrors.office = "Please select an Office/Place";
       if (!firstErrorField) firstErrorField = "office";
@@ -276,7 +266,6 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
     const assetData = {
       entityName,
       fundCluster,
-      propertyType,
       propertyNumber,
       office,
       ppeClass,
@@ -285,16 +274,14 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
       usefulLife: usefulLife ? parseInt(usefulLife) : null,
       rateOfDepreciation: rateOfDepreciation ? parseFloat(rateOfDepreciation) : null,
       dateAcquired,
-      reference,
-      receipt,
       quantity: parseInt(quantity),
       unitCost: parseFloat(unitCost),
       totalCost: parseFloat(totalCost),
-      residualValue: parseFloat(residualValue) || 0,
-      depreciableAmount: parseFloat(depreciableAmount) || 0,
-      annualDepreciation: parseFloat(annualDepreciation) || 0,
-      accumulatedDepreciation: parseFloat(accumulatedDepreciation) || 0,
-      netBookValue: parseFloat(netBookValue) || 0,
+      residualValue: parseFloat(residualValue),
+      depreciableAmount: parseFloat(depreciableAmount),
+      annualDepreciation: parseFloat(annualDepreciation),
+      accumulatedDepreciation: parseFloat(accumulatedDepreciation),
+      netBookValue: parseFloat(netBookValue),
       remarks
     };
 
@@ -302,13 +289,37 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
       let result;
       const isProduction = import.meta.env.PROD || !window.location.hostname.includes('localhost');
       
-      // Always save to localStorage first (fast and reliable)
-      console.log('Saving to localStorage first...');
+      if (isProduction) {
+        // Production mode - try Firebase first for cross-device sync
+        console.log('Production mode - trying Firebase first for cross-device sync...');
+        
+        try {
+          if (asset && asset.id) {
+            // Update existing asset in Firebase
+            result = await updateAsset(asset.id, assetData);
+          } else {
+            // Add new asset to Firebase
+            result = await saveAsset(assetData);
+          }
+          
+          if (result.success) {
+            console.log('Firebase save successful');
+            // Don't modify assetData with Firebase ID - Firebase handles IDs automatically
+          } else {
+            console.log('Firebase save failed, will use localStorage only');
+          }
+        } catch (firebaseError) {
+          console.log('Firebase save error, using localStorage only:', firebaseError);
+        }
+      }
+      
+      // Always save to localStorage (fast and reliable)
+      console.log('Saving to localStorage...');
       const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
       const newAsset = {
         ...assetData,
-        id: asset?.id || Date.now().toString(),
-        createdAt: new Date().toISOString(),
+        id: asset?.id || Date.now().toString(), // Use existing asset ID, don't create new one
+        createdAt: asset?.createdAt || new Date().toISOString(), // Preserve original creation time
         updatedAt: new Date().toISOString()
       };
       
@@ -333,6 +344,23 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
         saveAsset(assetData).then(firebaseResult => {
           if (firebaseResult.success) {
             console.log('Firebase save successful');
+            
+            // Add to asset history
+            const historyEntry = {
+              assetId: firebaseResult.id || newAsset.id,
+              action: asset && asset.id ? 'updated' : 'created',
+              description: asset && asset.id ? 'Asset updated' : 'Asset created',
+              timestamp: new Date().toISOString(),
+              changes: asset && asset.id ? assetData : null
+            };
+            
+            addAssetHistory(historyEntry).then(historyResult => {
+              if (historyResult.success) {
+                console.log('Asset history recorded');
+              } else {
+                console.log('Failed to record asset history');
+              }
+            });
           } else {
             console.log('Firebase save failed, using localStorage only');
           }
@@ -359,14 +387,11 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
   const resetForm = () => {
     setEntityName("");
     setFundCluster("");
-    setPropertyType("");
     setPropertyNumber("");
     setOffice("");
     setPpeClass("");
     setDescription("");
     setDateAcquired("");
-    setReference("");
-    setReceipt("");
     setQuantity(1);
     setUnitCost("");
     setAccountCode("");
@@ -465,25 +490,7 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Property Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  id="propertyType"
-                  value={propertyType}
-                  onChange={(e) => { setPropertyType(e.target.value); setErrors(prev => ({ ...prev, propertyType: null })); }}
-                  className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-colors bg-gray-50 ${errors.propertyType ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-green-500'}`}
-                >
-                  <option value="">Select Type</option>
-                  <option value="Property">Property</option>
-                  <option value="Plant">Plant</option>
-                  <option value="Equipment">Equipment</option>
-                </select>
-                {errors.propertyType && <p className="text-red-500 text-xs mt-1">{errors.propertyType}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Office / Place <span className="text-red-500">*</span>
+                  Office <span className="text-red-500">*</span>
                 </label>
                 <select
                   id="office"
@@ -492,8 +499,8 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
                   className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-colors bg-gray-50 ${errors.office ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-green-500'}`}
                 >
                   <option value="">Select Office</option>
-                  {officesData.map((off) => (
-                    <option key={off} value={off}>{off}</option>
+                  {officesData.map((office) => (
+                    <option key={office} value={office}>{office}</option>
                   ))}
                 </select>
                 {errors.office && <p className="text-red-500 text-xs mt-1">{errors.office}</p>}
@@ -567,30 +574,7 @@ export default function AssetForm({ asset = null, onAssetSaved, onCancel }) {
                 {errors.dateAcquired && <p className="text-red-500 text-xs mt-1">{errors.dateAcquired}</p>}
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Reference (Voucher/Invoice)
-                </label>
-                <input
-                  type="text"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none transition-colors bg-gray-50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Receipt
-                </label>
-                <input
-                  type="text"
-                  value={receipt}
-                  onChange={(e) => setReceipt(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none transition-colors bg-gray-50"
-                />
-              </div>
-
+              
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Quantity <span className="text-red-500">*</span>

@@ -10,7 +10,7 @@ import NotificationContainer from "./components/Notification";
 
 import { showNotification, showConfirmDialog } from "./utils/notificationHelpers";
 
-import { getAssets, saveAsset, updateAsset, deleteAsset as deleteAssetFromFirebase } from "./firebase";
+import { getAssets, saveAsset, updateAsset, deleteAsset as deleteAssetFromFirebase, forceDeleteAssets, deleteSpecificAssets, subscribeToAssets, subscribeToAssetHistory, subscribeToDepreciationLog, subscribeToTransfers, subscribeToDisposals, getAssetHistory, getDepreciationLog, getTransfers, getDisposals } from "./firebase";
 
 import * as XLSX from "xlsx";
 
@@ -79,6 +79,9 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
 
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null, onCancel: null });
+
+  // Track when deletion is in progress to prevent real-time listener interference
+  const [isDeleting, setIsDeleting] = useState(false);
 
   
 
@@ -157,81 +160,146 @@ export default function App() {
   // Production detection
   const isProduction = import.meta.env.PROD || !window.location.hostname.includes('localhost');
 
-  // Fetch assets from localStorage first, Firebase in background
+  // Fetch assets from Firebase in production, local server in development
   const fetchAssets = async () => {
     try {
       setLoading(true);
       setError(null);
       
       if (isProduction) {
-        // Production mode - localStorage first, Firebase background
-        console.log('Running in production mode - using localStorage first');
+        // Production mode - prioritize Firebase for cross-device sync
+        console.log('Running in production mode - prioritizing Firebase for cross-device sync');
         
-        // Load from localStorage immediately (fast)
-        const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
-        if (localAssets.length > 0) {
-          const transformedLocalAssets = localAssets.map(asset => ({
-            id: asset.id,
-            propertyNumber: asset.propertyNumber || '',
-            entityName: asset.entityName || '',
-            assetType: asset.assetType || asset.propertyType || 'Equipment',
-            location: asset.office || '',
-            office: asset.office || '',
-            status: asset.status || 'Active',
-            dateAcquired: asset.dateAcquired,
-            originalCost: asset.originalCost || asset.unitCost || 0,
-            current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
-            usefulLife: asset.usefulLife || 5,
-            depreciationRate: asset.depreciationRate || 0,
-            depreciableAmount: asset.depreciableAmount || 0,
-            annualDepreciation: asset.annualDepreciation || 0,
-            accumulatedDepreciation: asset.accumulatedDepreciation || 0,
-            netBookValue: asset.netBookValue || asset.unitCost || 0,
-            remarks: asset.remarks || '',
-            description: asset.description || '',
-            ppeClass: asset.ppeClass || '',
-            accountCode: asset.accountCode || '',
-            quantity: asset.quantity || 1,
-            unitCost: asset.unitCost || 0,
-            totalCost: asset.totalCost || 0,
-            residualValue: asset.residualValue || 0,
-            reference: asset.reference || '',
-            receipt: asset.receipt || '',
-            fundCluster: asset.fundCluster || '',
-            selected: false,
-            created_at: asset.createdAt,
-            updated_at: asset.updatedAt
-          }));
+        // Try Firebase first (for cross-device sync)
+        try {
+          const result = await getAssets();
+          console.log('Firebase result:', result);
           
-          console.log('Loaded from localStorage:', transformedLocalAssets.length, 'assets');
-          setAssets(transformedLocalAssets);
-          setSelectedAssets([]);
-        }
-        
-        // Try Firebase in background (non-blocking)
-        console.log('Attempting Firebase fetch in background...');
-        getAssets().then(result => {
           if (result.success && result.data.length > 0) {
-            console.log('Firebase fetch successful, syncing with localStorage');
-            // Merge Firebase data with localStorage
-            const firebaseAssets = result.data;
-            const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
-            
-            // Simple merge: Firebase takes precedence for duplicates
-            const mergedAssets = [...localAssets];
-            firebaseAssets.forEach(firebaseAsset => {
-              const existingIndex = mergedAssets.findIndex(a => a.propertyNumber === firebaseAsset.propertyNumber);
-              if (existingIndex === -1) {
-                mergedAssets.push(firebaseAsset);
+            console.log('Firebase fetch successful - using Firebase data');
+            // Transform Firebase data to match your app's expected format
+            const transformedAssets = result.data.map(asset => {
+              // Fix useful life based on account code (Land should have no useful life)
+              let usefulLife = asset.usefulLife;
+              if (asset.accountCode === '10601010' || asset.accountCode === '10602020' || asset.accountCode === '10699010' || asset.accountCode === '10699030') {
+                usefulLife = ''; // Land and Construction in Progress have no useful life
+              } else if (asset.accountCode === '10602990') {
+                usefulLife = usefulLife || 20; // Other Land Improvements: 20 years
+              } else if (asset.accountCode === '10603040') {
+                usefulLife = usefulLife || 15; // Water Supply Systems: 15 years
+              } else if (asset.accountCode === '10603050') {
+                usefulLife = usefulLife || 20; // Power Supply Systems: 20 years
+              } else if (asset.accountCode === '10604010') {
+                usefulLife = usefulLife || 30; // Buildings: 30 years
+              } else if (asset.accountCode === '10604990') {
+                usefulLife = usefulLife || 20; // Other Structures: 20 years
+              } else if (asset.accountCode === '10605020' || asset.accountCode === '10605030' || asset.accountCode === '10605070' || asset.accountCode === '10605090') {
+                usefulLife = usefulLife || 5; // Office/ICT/Communication/Disaster Equipment: 5 years
+              } else if (asset.accountCode === '10605140') {
+                usefulLife = usefulLife || 7; // Technical and Scientific Equipment: 7 years
+              } else if (asset.accountCode === '10606010') {
+                usefulLife = usefulLife || 7; // Motor Vehicles: 7 years
+              } else if (asset.accountCode === '10607010') {
+                usefulLife = usefulLife || 10; // Furniture and Fixtures: 10 years
               } else {
-                mergedAssets[existingIndex] = { ...mergedAssets[existingIndex], ...firebaseAsset };
+                usefulLife = usefulLife || 5; // Default fallback
               }
+              
+              return {
+                id: asset.id,
+                propertyNumber: asset.propertyNumber || '',
+                entityName: asset.entityName || asset.asset_name || '',
+                assetType: asset.assetType || asset.asset_type || 'Equipment',
+                location: asset.location || '',
+                office: asset.office || '',
+                status: asset.status || 'Active',
+                dateAcquired: asset.dateAcquired || asset.createdAt?.split('T')[0],
+                originalCost: asset.originalCost || asset.purchase_cost || 0,
+                current_value: asset.current_value || asset.originalCost || asset.purchase_cost || 0,
+                usefulLife: usefulLife,
+                depreciationRate: asset.depreciationRate || 0,
+                depreciableAmount: asset.depreciableAmount || 0,
+                annualDepreciation: asset.annualDepreciation || 0,
+                accumulatedDepreciation: asset.accumulatedDepreciation || 0,
+                netBookValue: asset.netBookValue || asset.current_value || asset.originalCost || asset.purchase_cost || 0,
+                remarks: asset.remarks || '',
+                description: asset.description || '',
+                ppeClass: asset.ppeClass || '',
+                accountCode: asset.accountCode || '',
+                quantity: asset.quantity || 1,
+                unitCost: asset.unitCost || 0,
+                totalCost: asset.totalCost || 0,
+                residualValue: asset.residualValue || 0,
+                reference: asset.reference || '',
+                receipt: asset.receipt || '',
+                fundCluster: asset.fundCluster || '',
+                selected: false,
+                created_at: asset.createdAt,
+                updated_at: asset.updatedAt
+              };
             });
             
-            localStorage.setItem('denr_assets', JSON.stringify(mergedAssets));
+            // Save to localStorage for offline access
+            localStorage.setItem('denr_assets', JSON.stringify(result.data));
             
-            // Update UI with merged data
-            const transformedAssets = mergedAssets.map(asset => ({
+            console.log('Loaded from Firebase:', transformedAssets.length, 'assets');
+            setAssets(transformedAssets);
+            setSelectedAssets([]);
+            
+          } else {
+            console.log('Firebase has no data, checking localStorage...');
+            
+            // Fallback to localStorage if Firebase is empty
+            const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
+            if (localAssets.length > 0) {
+              const transformedLocalAssets = localAssets.map(asset => ({
+                id: asset.id,
+                propertyNumber: asset.propertyNumber || '',
+                entityName: asset.entityName || '',
+                assetType: asset.assetType || asset.propertyType || 'Equipment',
+                location: asset.office || '',
+                office: asset.office || '',
+                status: asset.status || 'Active',
+                dateAcquired: asset.dateAcquired,
+                originalCost: asset.originalCost || asset.unitCost || 0,
+                current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
+                usefulLife: asset.usefulLife || 5,
+                depreciationRate: asset.depreciationRate || 0,
+                depreciableAmount: asset.depreciableAmount || 0,
+                annualDepreciation: asset.annualDepreciation || 0,
+                accumulatedDepreciation: asset.accumulatedDepreciation || 0,
+                netBookValue: asset.netBookValue || asset.unitCost || 0,
+                remarks: asset.remarks || '',
+                description: asset.description || '',
+                ppeClass: asset.ppeClass || '',
+                accountCode: asset.accountCode || '',
+                quantity: asset.quantity || 1,
+                unitCost: asset.unitCost || 0,
+                totalCost: asset.totalCost || 0,
+                residualValue: asset.residualValue || 0,
+                reference: asset.reference || '',
+                receipt: asset.receipt || '',
+                fundCluster: asset.fundCluster || '',
+                selected: false,
+                created_at: asset.createdAt,
+                updated_at: asset.updatedAt
+              }));
+              
+              console.log('Loaded from localStorage:', transformedLocalAssets.length, 'assets');
+              setAssets(transformedLocalAssets);
+              setSelectedAssets([]);
+              setError('Showing locally saved data. Firebase connection unavailable.');
+            } else {
+              setError('No assets found. Please import some assets to get started.');
+            }
+          }
+        } catch (firebaseError) {
+          console.error('Firebase connection error:', firebaseError);
+          
+          // Fallback to localStorage if Firebase fails
+          const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
+          if (localAssets.length > 0) {
+            const transformedLocalAssets = localAssets.map(asset => ({
               id: asset.id,
               propertyNumber: asset.propertyNumber || '',
               entityName: asset.entityName || '',
@@ -264,15 +332,13 @@ export default function App() {
               updated_at: asset.updatedAt
             }));
             
-            setAssets(transformedAssets);
+            setAssets(transformedLocalAssets);
             setSelectedAssets([]);
+            setError('Showing locally saved data. Firebase connection unavailable.');
           } else {
-            console.log('Firebase fetch failed or empty, using localStorage only');
+            setError('Failed to connect to Firebase database. Please check your configuration.');
           }
-        }).catch(err => {
-          console.log('Firebase fetch error:', err);
-        });
-        
+        }
       } else {
         // Development mode - connect to local server
         try {
@@ -304,19 +370,53 @@ export default function App() {
   const fetchAllData = async () => {
     try {
       if (isProduction) {
-        // Production mode - use localStorage for history/depreciation/transfers/disposals
-        console.log('Production mode - using localStorage for history/depreciation/transfers/disposals');
+        // Production mode - use Firebase for asset records
+        console.log('Production mode - using Firebase for asset records');
         
-        // Load from localStorage
-        const history = JSON.parse(localStorage.getItem('denr_asset_history') || '[]');
-        const depreciationLog = JSON.parse(localStorage.getItem('denr_depreciation_log') || '[]');
-        const transfers = JSON.parse(localStorage.getItem('denr_transfers') || '[]');
-        const disposals = JSON.parse(localStorage.getItem('denr_disposals') || '[]');
-        
-        setAssetHistory(history);
-        setDepreciationLog(depreciationLog);
-        setTransfers(transfers);
-        setDisposals(disposals);
+        // Fetch from Firebase collections
+        try {
+          const [historyRes, depreciationRes, transfersRes, disposalsRes] = await Promise.all([
+            getAssetHistory(),
+            getDepreciationLog(),
+            getTransfers(),
+            getDisposals()
+          ]);
+          
+          if (historyRes.success) {
+            setAssetHistory(historyRes.data);
+            localStorage.setItem('denr_asset_history', JSON.stringify(historyRes.data));
+          }
+          
+          if (depreciationRes.success) {
+            setDepreciationLog(depreciationRes.data);
+            localStorage.setItem('denr_depreciation_log', JSON.stringify(depreciationRes.data));
+          }
+          
+          if (transfersRes.success) {
+            setTransfers(transfersRes.data);
+            localStorage.setItem('denr_transfers', JSON.stringify(transfersRes.data));
+          }
+          
+          if (disposalsRes.success) {
+            setDisposals(disposalsRes.data);
+            localStorage.setItem('denr_disposals', JSON.stringify(disposalsRes.data));
+          }
+          
+          console.log('Firebase asset records loaded successfully');
+        } catch (error) {
+          console.log('Firebase asset records failed, falling back to localStorage:', error);
+          
+          // Fallback to localStorage
+          const history = JSON.parse(localStorage.getItem('denr_asset_history') || '[]');
+          const depreciationLog = JSON.parse(localStorage.getItem('denr_depreciation_log') || '[]');
+          const transfers = JSON.parse(localStorage.getItem('denr_transfers') || '[]');
+          const disposals = JSON.parse(localStorage.getItem('denr_disposals') || '[]');
+          
+          setAssetHistory(history);
+          setDepreciationLog(depreciationLog);
+          setTransfers(transfers);
+          setDisposals(disposals);
+        }
         
       } else {
         // Development mode - use local server
@@ -438,6 +538,30 @@ export default function App() {
 
 
 
+  // Cleanup problematic assets
+  const cleanupProblematicAssets = async () => {
+    const problematicIds = ['ewGZ9wnW7x0PGZiwZEvL', 'uCjOaf9wYA45Oa1jgsP4'];
+    
+    try {
+      console.log('Cleaning up problematic assets:', problematicIds);
+      const result = await forceDeleteAssets(problematicIds);
+      
+      if (result.success) {
+        console.log('Force delete results:', result.results);
+        
+        // Also remove from localStorage
+        const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
+        const filteredAssets = localAssets.filter(asset => !problematicIds.includes(asset.id));
+        localStorage.setItem('denr_assets', JSON.stringify(filteredAssets));
+        setAssets(filteredAssets);
+        
+        showNotification('Problematic assets cleaned up successfully!', 'success');
+      }
+    } catch (error) {
+      console.error('Error cleaning up assets:', error);
+    }
+  };
+
   // Delete asset
   const deleteAsset = async (id) => {
     showConfirmDialog(
@@ -447,29 +571,56 @@ export default function App() {
           let success = false;
           
           if (isProduction) {
-            // Production mode - delete from localStorage first (fast), Firebase in background
+            // Production mode - more aggressive deletion approach
+            console.log('Deleting from Firebase:', id);
+            setIsDeleting(true); // Prevent real-time listener interference
+            
+            // First, try to delete from Firebase with retries
+            let firebaseResult = await deleteAssetFromFirebase(id);
+            
+            // If Firebase fails due to network issues, try again up to 3 times
+            if (!firebaseResult.success) {
+              console.log('Firebase delete failed, retrying...', id);
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Wait 1s, 2s, 3s
+                firebaseResult = await deleteAssetFromFirebase(id);
+                if (firebaseResult.success) {
+                  console.log(`Firebase delete successful on attempt ${attempt}:`, id);
+                  break;
+                }
+              }
+            }
+            
+            // Always delete from localStorage regardless of Firebase status
             const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
             const updatedAssets = localAssets.filter(asset => asset.id !== id);
             localStorage.setItem('denr_assets', JSON.stringify(updatedAssets));
             
-            console.log('Deleted from localStorage:', id);
-            success = true;
-            
             // Update UI immediately
             setAssets(updatedAssets);
-            showNotification("Asset deleted successfully!", "success");
             
-            // Try Firebase in background (non-blocking)
-            deleteAssetFromFirebase(id).then(firebaseResult => {
-              if (firebaseResult.success) {
-                console.log('Firebase delete successful for:', id);
-              } else {
-                console.log('Firebase delete failed for:', id);
-              }
-            }).catch(err => {
-              console.log('Firebase delete error for:', id, err);
-            });
+            // Force remove from selected assets if present
+            setSelectedAssets(prev => prev.filter(selectedId => selectedId !== id));
             
+            if (firebaseResult.success) {
+              console.log('Firebase delete successful for:', id);
+              showNotification("Asset deleted successfully!", "success");
+              
+              // Wait a bit longer before re-enabling real-time listener
+              setTimeout(() => {
+                setIsDeleting(false);
+                console.log('Re-enabling real-time listener after successful deletion');
+              }, 3000);
+            } else {
+              console.log('Firebase delete failed but localStorage deletion completed for:', id);
+              showNotification("Asset deleted locally. Cloud sync may be delayed due to connection issues.", "warning");
+              
+              // Re-enable real-time listener after warning
+              setTimeout(() => {
+                setIsDeleting(false);
+                console.log('Re-enabling real-time listener after failed deletion');
+              }, 2000);
+            }
           } else {
             // Development mode - use local server
             const response = await fetch(`http://localhost:4000/api/assets/${id}`, {
@@ -487,6 +638,9 @@ export default function App() {
         } catch (error) {
           console.error("Error deleting asset:", error);
           showNotification("Error deleting asset. Please try again.", "error");
+        } finally {
+          // Always reset deletion state
+          setIsDeleting(false);
         }
       }
     );
@@ -507,31 +661,43 @@ export default function App() {
         let successCount = 0;
         
         if (isProduction) {
-          // Production mode - delete from localStorage first (fast), Firebase in background
+          // Production mode - delete from Firebase first, then localStorage
+          let successCount = 0;
+          let failedIds = [];
+          
+          // Delete from Firebase first
+          for (const id of selectedAssets) {
+            try {
+              const firebaseResult = await deleteAssetFromFirebase(id);
+              if (firebaseResult.success) {
+                successCount++;
+                console.log('Firebase delete successful for:', id);
+              } else {
+                failedIds.push(id);
+                console.log('Firebase delete failed for:', id);
+              }
+            } catch (err) {
+              failedIds.push(id);
+              console.log('Firebase delete error for:', id, err);
+            }
+          }
+          
+          // Now delete from localStorage for successful Firebase deletions
           const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
-          const updatedAssets = localAssets.filter(asset => !selectedAssets.includes(asset.id));
+          const updatedAssets = localAssets.filter(asset => !failedIds.includes(asset.id) && !selectedAssets.includes(asset.id) || failedIds.includes(asset.id));
           localStorage.setItem('denr_assets', JSON.stringify(updatedAssets));
           
-          console.log('Deleted from localStorage:', selectedAssets.length, 'assets');
-          successCount = selectedAssets.length;
+          console.log('Deleted from localStorage:', successCount, 'assets');
           
           // Update UI immediately
           setAssets(updatedAssets);
           setSelectedAssets([]);
-          showNotification(`Successfully deleted ${successCount} asset(s).`, "success");
           
-          // Try Firebase in background (non-blocking)
-          selectedAssets.forEach(id => {
-            deleteAssetFromFirebase(id).then(firebaseResult => {
-              if (firebaseResult.success) {
-                console.log('Firebase delete successful for:', id);
-              } else {
-                console.log('Firebase delete failed for:', id);
-              }
-            }).catch(err => {
-              console.log('Firebase delete error for:', id, err);
-            });
-          });
+          if (successCount > 0) {
+            showNotification(`Successfully deleted ${successCount} asset(s).${failedIds.length > 0 ? ` Failed to delete ${failedIds.length} asset(s).` : ''}`, successCount === selectedAssets.length ? "success" : "warning");
+          } else {
+            showNotification("Failed to delete selected assets. Please try again.", "error");
+          }
           
         } else {
           // Development mode - use local server
@@ -568,41 +734,48 @@ export default function App() {
   // Create transfer
 
   const handleCreateTransfer = async (e) => {
-
     e.preventDefault();
-
+    
     try {
-
-      const response = await fetch("http://localhost:4000/api/transfers", {
-
-        method: "POST",
-
-        headers: { "Content-Type": "application/json" },
-
-        body: JSON.stringify(transferForm)
-
-      });
-
-      if (response.ok) {
-
+      if (isProduction) {
+        // Production mode - save to localStorage
+        console.log('Creating transfer record in localStorage...');
+        
+        const newTransfer = {
+          id: Date.now().toString(),
+          ...transferForm,
+          createdAt: new Date().toISOString()
+        };
+        
+        const existingTransfers = JSON.parse(localStorage.getItem('denr_transfers') || '[]');
+        const updatedTransfers = [...existingTransfers, newTransfer];
+        localStorage.setItem('denr_transfers', JSON.stringify(updatedTransfers));
+        
+        setTransfers(updatedTransfers);
         showNotification("Transfer record created successfully!", "success");
-
         setShowTransferModal(false);
-
         setTransferForm({ assetId: '', fromOffice: '', toOffice: '', transferDate: '', transferReason: '', transferredBy: '', receivedBy: '' });
-
-        fetchAssets();
-
         fetchAllData();
-
+        
+      } else {
+        // Development mode - use local server
+        const response = await fetch("http://localhost:4000/api/transfers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(transferForm)
+        });
+        
+        if (response.ok) {
+          showNotification("Transfer record created successfully!", "success");
+          setShowTransferModal(false);
+          setTransferForm({ assetId: '', fromOffice: '', toOffice: '', transferDate: '', transferReason: '', transferredBy: '', receivedBy: '' });
+          fetchAssets();
+          fetchAllData();
+        }
       }
-
     } catch {
-
       showNotification("Error creating transfer. Please try again.", "error");
-
     }
-
   };
 
 
@@ -610,41 +783,48 @@ export default function App() {
   // Create disposal
 
   const handleCreateDisposal = async (e) => {
-
     e.preventDefault();
-
+    
     try {
-
-      const response = await fetch("http://localhost:4000/api/disposals", {
-
-        method: "POST",
-
-        headers: { "Content-Type": "application/json" },
-
-        body: JSON.stringify(disposalForm)
-
-      });
-
-      if (response.ok) {
-
+      if (isProduction) {
+        // Production mode - save to localStorage
+        console.log('Creating disposal record in localStorage...');
+        
+        const newDisposal = {
+          id: Date.now().toString(),
+          ...disposalForm,
+          createdAt: new Date().toISOString()
+        };
+        
+        const existingDisposals = JSON.parse(localStorage.getItem('denr_disposals') || '[]');
+        const updatedDisposals = [...existingDisposals, newDisposal];
+        localStorage.setItem('denr_disposals', JSON.stringify(updatedDisposals));
+        
+        setDisposals(updatedDisposals);
         showNotification("Disposal record created successfully!", "success");
-
         setShowDisposalModal(false);
-
         setDisposalForm({ assetId: '', disposalDate: '', disposalMethod: '', disposalReason: '', proceeds: 0, bookValueAtDisposal: 0, approvedBy: '' });
-
-        fetchAssets();
-
         fetchAllData();
-
+        
+      } else {
+        // Development mode - use local server
+        const response = await fetch("http://localhost:4000/api/disposals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(disposalForm)
+        });
+        
+        if (response.ok) {
+          showNotification("Disposal record created successfully!", "success");
+          setShowDisposalModal(false);
+          setDisposalForm({ assetId: '', disposalDate: '', disposalMethod: '', disposalReason: '', proceeds: 0, bookValueAtDisposal: 0, approvedBy: '' });
+          fetchAssets();
+          fetchAllData();
+        }
       }
-
     } catch {
-
       showNotification("Error creating disposal. Please try again.", "error");
-
     }
-
   };
 
 
@@ -1206,6 +1386,30 @@ export default function App() {
           const unitCost = getNum(['Unit Cost', 'unitCost', 'UnitCost', 'Cost', 'cost', 'UnitPrice', 'Purchase Cost', 'Acquisition Cost']) || 0;
           const residualValue = getNum(['Residual Value', 'residualValue', 'ResidualValue', 'Salvage Value', 'salvageValue']) || 0;
           let usefulLife = getNum(['Useful Life (Years)', 'Useful Life', 'usefulLife', 'Life', 'UsefulLife', 'Years', 'Estimated Useful Life']) || 5;
+          
+          // Fix useful life based on account code (Land should have no useful life)
+          if (accountCode === '10601010' || accountCode === '10602020' || accountCode === '10699010' || accountCode === '10699030') {
+            usefulLife = ''; // Land and Construction in Progress have no useful life
+          } else if (accountCode === '10602990') {
+            usefulLife = usefulLife || 20; // Other Land Improvements: 20 years
+          } else if (accountCode === '10603040') {
+            usefulLife = usefulLife || 15; // Water Supply Systems: 15 years
+          } else if (accountCode === '10603050') {
+            usefulLife = usefulLife || 20; // Power Supply Systems: 20 years
+          } else if (accountCode === '10604010') {
+            usefulLife = usefulLife || 30; // Buildings: 30 years
+          } else if (accountCode === '10604990') {
+            usefulLife = usefulLife || 20; // Other Structures: 20 years
+          } else if (accountCode === '10605020' || accountCode === '10605030' || accountCode === '10605070' || accountCode === '10605090') {
+            usefulLife = usefulLife || 5; // Office/ICT/Communication/Disaster Equipment: 5 years
+          } else if (accountCode === '10605140') {
+            usefulLife = usefulLife || 7; // Technical and Scientific Equipment: 7 years
+          } else if (accountCode === '10606010') {
+            usefulLife = usefulLife || 7; // Motor Vehicles: 7 years
+          } else if (accountCode === '10607010') {
+            usefulLife = usefulLife || 10; // Furniture and Fixtures: 10 years
+          }
+          
           const depreciableAmount = getNum(['Depreciable Amount', 'depreciableAmount', 'DepreciableAmount']) || 0;
           const accumulatedDepreciation = getNum(['Accumulated Depreciation', 'Accumulated Depreciation', 'accumulatedDepreciation', 'AccumulatedDepreciation', 'Accum Depr', 'Accumulated', 'Accum Dep', 'Accumulated Dep', 'Accum. Dep.', 'Accumulated']) || 0;
           const netBookValue = getNum(['Net Book Value', 'netBookValue', 'NetBookValue', 'Book Value', 'Current Value']) || 0;
@@ -1576,6 +1780,33 @@ export default function App() {
   useEffect(() => {
 
     fetchAssets();
+    fetchAllData(); // Load asset records
+
+    // Auto-delete specific problematic Firebase documents
+    if (isProduction) {
+      deleteSpecificAssets().then(result => {
+        if (result.success) {
+          console.log('Auto-deleted specific Firebase documents:', result.results);
+          // Refresh assets after deletion
+          setTimeout(() => {
+            fetchAssets();
+            fetchAllData(); // Refresh asset records too
+          }, 1000);
+        }
+      }).catch(err => {
+        console.log('Auto-delete failed:', err);
+      });
+    }
+
+    // Don't call fetchAllData() on initial load to prevent overwriting imported depreciation values
+
+  }, []);
+
+
+
+  useEffect(() => {
+
+    fetchAssets();
 
     // Don't call fetchAllData() on initial load to prevent overwriting imported depreciation values
 
@@ -1618,6 +1849,170 @@ export default function App() {
     }
 
   }, [assets]);
+
+
+
+  // Set up real-time Firebase listeners for cross-device synchronization
+  useEffect(() => {
+    if (!isProduction) return; // Only enable in production with Firebase
+
+    console.log('Setting up real-time Firebase listeners...');
+
+    const unsubscribers = [];
+
+    // Assets real-time listener
+    const assetsUnsub = subscribeToAssets((assetsData, error) => {
+      if (error) {
+        console.error('Real-time assets error:', error);
+        return;
+      }
+      
+      // Ignore real-time updates during deletion to prevent conflicts
+      if (isDeleting) {
+        console.log('Ignoring real-time update during deletion...');
+        return;
+      }
+      
+      if (assetsData) {
+        console.log('Real-time assets update received:', assetsData.length);
+        
+        // Transform Firebase data to match app format
+        const transformedAssets = assetsData.map(asset => {
+          // Fix useful life based on account code (Land should have no useful life)
+          let usefulLife = asset.usefulLife;
+          if (asset.accountCode === '10601010' || asset.accountCode === '10602020' || asset.accountCode === '10699010' || asset.accountCode === '10699030') {
+            usefulLife = ''; // Land and Construction in Progress have no useful life
+          } else if (asset.accountCode === '10602990') {
+            usefulLife = usefulLife || 20; // Other Land Improvements: 20 years
+          } else if (asset.accountCode === '10603040') {
+            usefulLife = usefulLife || 15; // Water Supply Systems: 15 years
+          } else if (asset.accountCode === '10603050') {
+            usefulLife = usefulLife || 20; // Power Supply Systems: 20 years
+          } else if (asset.accountCode === '10604010') {
+            usefulLife = usefulLife || 30; // Buildings: 30 years
+          } else if (asset.accountCode === '10604990') {
+            usefulLife = usefulLife || 20; // Other Structures: 20 years
+          } else if (asset.accountCode === '10605020' || asset.accountCode === '10605030' || asset.accountCode === '10605070' || asset.accountCode === '10605090') {
+            usefulLife = usefulLife || 5; // Office/ICT/Communication/Disaster Equipment: 5 years
+          } else if (asset.accountCode === '10605140') {
+            usefulLife = usefulLife || 7; // Technical and Scientific Equipment: 7 years
+          } else if (asset.accountCode === '10606010') {
+            usefulLife = usefulLife || 7; // Motor Vehicles: 7 years
+          } else if (asset.accountCode === '10607010') {
+            usefulLife = usefulLife || 10; // Furniture and Fixtures: 10 years
+          } else {
+            usefulLife = usefulLife || 5; // Default fallback
+          }
+          
+          return {
+            id: asset.id,
+            propertyNumber: asset.propertyNumber || '',
+            entityName: asset.entityName || asset.asset_name || '',
+            assetType: asset.assetType || asset.asset_type || 'Equipment',
+            location: asset.location || '',
+            office: asset.office || '',
+            status: asset.status || 'Active',
+            dateAcquired: asset.dateAcquired || asset.createdAt?.split('T')[0],
+            originalCost: asset.originalCost || asset.purchase_cost || 0,
+            current_value: asset.current_value || asset.originalCost || asset.purchase_cost || 0,
+            usefulLife: usefulLife,
+            depreciationRate: asset.depreciationRate || 0,
+            depreciableAmount: asset.depreciableAmount || 0,
+            annualDepreciation: asset.annualDepreciation || 0,
+            accumulatedDepreciation: asset.accumulatedDepreciation || 0,
+            netBookValue: asset.netBookValue || asset.current_value || asset.originalCost || asset.purchase_cost || 0,
+            remarks: asset.remarks || '',
+            description: asset.description || '',
+            ppeClass: asset.ppeClass || '',
+            accountCode: asset.accountCode || '',
+            quantity: asset.quantity || 1,
+            unitCost: asset.unitCost || 0,
+            totalCost: asset.totalCost || 0,
+            residualValue: asset.residualValue || 0,
+            reference: asset.reference || '',
+            receipt: asset.receipt || '',
+            fundCluster: asset.fundCluster || '',
+            selected: false,
+            created_at: asset.createdAt,
+            updated_at: asset.updatedAt
+          };
+        });
+        
+        setAssets(transformedAssets);
+        setSelectedAssets([]);
+        
+        // Also update localStorage for offline access
+        localStorage.setItem('denr_assets', JSON.stringify(assetsData));
+      }
+    });
+    unsubscribers.push(assetsUnsub);
+
+    // Asset history real-time listener
+    const historyUnsub = subscribeToAssetHistory((historyData, error) => {
+      if (error) {
+        console.error('Real-time history error:', error);
+        return;
+      }
+      
+      if (historyData) {
+        console.log('Real-time history update received:', historyData.length);
+        setAssetHistory(historyData);
+        localStorage.setItem('denr_asset_history', JSON.stringify(historyData));
+      }
+    });
+    unsubscribers.push(historyUnsub);
+
+    // Depreciation log real-time listener
+    const depreciationUnsub = subscribeToDepreciationLog((logData, error) => {
+      if (error) {
+        console.error('Real-time depreciation error:', error);
+        return;
+      }
+      
+      if (logData) {
+        console.log('Real-time depreciation update received:', logData.length);
+        setDepreciationLog(logData);
+        localStorage.setItem('denr_depreciation_log', JSON.stringify(logData));
+      }
+    });
+    unsubscribers.push(depreciationUnsub);
+
+    // Transfers real-time listener
+    const transfersUnsub = subscribeToTransfers((transfersData, error) => {
+      if (error) {
+        console.error('Real-time transfers error:', error);
+        return;
+      }
+      
+      if (transfersData) {
+        console.log('Real-time transfers update received:', transfersData.length);
+        setTransfers(transfersData);
+        localStorage.setItem('denr_transfers', JSON.stringify(transfersData));
+      }
+    });
+    unsubscribers.push(transfersUnsub);
+
+    // Disposals real-time listener
+    const disposalsUnsub = subscribeToDisposals((disposalsData, error) => {
+      if (error) {
+        console.error('Real-time disposals error:', error);
+        return;
+      }
+      
+      if (disposalsData) {
+        console.log('Real-time disposals update received:', disposalsData.length);
+        setDisposals(disposalsData);
+        localStorage.setItem('denr_disposals', JSON.stringify(disposalsData));
+      }
+    });
+    unsubscribers.push(disposalsUnsub);
+
+    // Cleanup function
+    return () => {
+      console.log('Cleaning up real-time listeners...');
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [isProduction]);
 
 
 
@@ -1694,177 +2089,137 @@ export default function App() {
 
 
   const clearDepreciationLog = async () => {
-
     try {
-
-      const response = await fetch("http://localhost:4000/api/depreciation-log/clear", {
-
-        method: "POST"
-
-      });
-
-      
-
-      if (response.ok) {
-
-        const result = await response.json();
-
-        console.log('Depreciation log cleared:', result);
-
+      if (isProduction) {
+        // Production mode - clear from localStorage
+        console.log('Clearing depreciation log from localStorage...');
+        localStorage.setItem('denr_depreciation_log', JSON.stringify([]));
+        setDepreciationLog([]);
         showNotification(`Depreciation log cleared successfully!`, "success");
-
         fetchAllData(); // Refresh to update the count
-
       } else {
-
-        const errorText = await response.text();
-
-        console.error('Clear depreciation log error:', errorText);
-
-        showNotification(`Failed to clear depreciation log: ${errorText}`, "error");
-
+        // Development mode - use local server
+        const response = await fetch("http://localhost:4000/api/depreciation-log/clear", {
+          method: "POST"
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Depreciation log cleared:', result);
+          showNotification(`Depreciation log cleared successfully!`, "success");
+          fetchAllData(); // Refresh to update the count
+        } else {
+          const errorText = await response.text();
+          console.error('Clear depreciation log error:', errorText);
+          showNotification(`Failed to clear depreciation log: ${errorText}`, "error");
+        }
       }
-
     } catch (error) {
-
       console.error('Error clearing depreciation log:', error);
-
       showNotification("Error clearing depreciation log. Please try again.", "error");
-
     }
-
   };
 
 
 
   const clearTransfers = async () => {
-
     try {
-
-      const response = await fetch("http://localhost:4000/api/transfers/clear", {
-
-        method: "POST"
-
-      });
-
-      
-
-      if (response.ok) {
-
-        const result = await response.json();
-
-        console.log('Transfers cleared:', result);
-
+      if (isProduction) {
+        // Production mode - clear from localStorage
+        console.log('Clearing transfers from localStorage...');
+        localStorage.setItem('denr_transfers', JSON.stringify([]));
+        setTransfers([]);
         showNotification(`Transfer records cleared successfully!`, "success");
-
         fetchAllData(); // Refresh to update the count
-
       } else {
-
-        const errorText = await response.text();
-
-        console.error('Clear transfers error:', errorText);
-
-        showNotification(`Failed to clear transfers: ${errorText}`, "error");
-
+        // Development mode - use local server
+        const response = await fetch("http://localhost:4000/api/transfers/clear", {
+          method: "POST"
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Transfers cleared:', result);
+          showNotification(`Transfer records cleared successfully!`, "success");
+          fetchAllData(); // Refresh to update the count
+        } else {
+          const errorText = await response.text();
+          console.error('Clear transfers error:', errorText);
+          showNotification(`Failed to clear transfers: ${errorText}`, "error");
+        }
       }
-
     } catch (error) {
-
       console.error('Error clearing transfers:', error);
-
       showNotification("Error clearing transfers. Please try again.", "error");
-
     }
-
   };
 
 
 
   const clearDisposals = async () => {
-
     try {
-
-      const response = await fetch("http://localhost:4000/api/disposals/clear", {
-
-        method: "POST"
-
-      });
-
-      
-
-      if (response.ok) {
-
-        const result = await response.json();
-
-        console.log('Disposals cleared:', result);
-
+      if (isProduction) {
+        // Production mode - clear from localStorage
+        console.log('Clearing disposals from localStorage...');
+        localStorage.setItem('denr_disposals', JSON.stringify([]));
+        setDisposals([]);
         showNotification(`Disposal records cleared successfully!`, "success");
-
         fetchAllData(); // Refresh to update the count
-
       } else {
-
-        const errorText = await response.text();
-
-        console.error('Clear disposals error:', errorText);
-
-        showNotification(`Failed to clear disposals: ${errorText}`, "error");
-
+        // Development mode - use local server
+        const response = await fetch("http://localhost:4000/api/disposals/clear", {
+          method: "POST"
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Disposals cleared:', result);
+          showNotification(`Disposal records cleared successfully!`, "success");
+          fetchAllData(); // Refresh to update the count
+        } else {
+          const errorText = await response.text();
+          console.error('Clear disposals error:', errorText);
+          showNotification(`Failed to clear disposals: ${errorText}`, "error");
+        }
       }
-
     } catch (error) {
-
       console.error('Error clearing disposals:', error);
-
       showNotification("Error clearing disposals. Please try again.", "error");
-
     }
-
   };
 
 
 
   const clearAssetHistory = async () => {
-
     try {
-
-      const response = await fetch("http://localhost:4000/api/asset-history/clear", {
-
-        method: "POST"
-
-      });
-
-      
-
-      if (response.ok) {
-
-        const result = await response.json();
-
-        console.log('Asset history cleared:', result);
-
+      if (isProduction) {
+        // Production mode - clear from localStorage
+        console.log('Clearing asset history from localStorage...');
+        localStorage.setItem('denr_asset_history', JSON.stringify([]));
+        setAssetHistory([]);
         showNotification(`Asset history cleared successfully!`, "success");
-
         fetchAllData(); // Refresh to update the count
-
       } else {
-
-        const errorText = await response.text();
-
-        console.error('Clear history error:', errorText);
-
-        showNotification(`Failed to clear history: ${errorText}`, "error");
-
+        // Development mode - use local server
+        const response = await fetch("http://localhost:4000/api/asset-history/clear", {
+          method: "POST"
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Asset history cleared:', result);
+          showNotification(`Asset history cleared successfully!`, "success");
+          fetchAllData(); // Refresh to update the count
+        } else {
+          const errorText = await response.text();
+          console.error('Clear history error:', errorText);
+          showNotification(`Failed to clear history: ${errorText}`, "error");
+        }
       }
-
     } catch (error) {
-
       console.error('Error clearing asset history:', error);
-
       showNotification("Error clearing asset history. Please try again.", "error");
-
     }
-
   };
 
 
@@ -2307,7 +2662,11 @@ export default function App() {
 
                           <td className="px-1 py-2 text-xs text-gray-700">{asset.office || "-"}</td>
 
-                          <td className="px-1 py-2 text-xs text-gray-700 max-w-[120px] truncate">{asset.description || "-"}</td>
+                          <td className="px-1 py-2 text-xs text-gray-700" title={asset.description || "-"}>
+                            <div className="max-w-[150px] truncate">
+                              {asset.description || "-"}
+                            </div>
+                          </td>
 
                           <td className="px-1 py-2"><span className="bg-green-100 text-green-700 px-1 py-0.5 rounded text-xs font-medium">{asset.ppeClass || "-"}</span></td>
 
@@ -2357,7 +2716,11 @@ export default function App() {
 
                           </td>
 
-                          <td className="px-1 py-2 text-xs text-gray-600 max-w-[100px] truncate">{asset.remarks || "-"}</td>
+                          <td className="px-1 py-2 text-xs text-gray-600" title={asset.remarks || "-"}>
+                            <div className="max-w-[120px] truncate">
+                              {asset.remarks || "-"}
+                            </div>
+                          </td>
 
                           <td className="px-1 py-2">
 
@@ -3151,7 +3514,7 @@ export default function App() {
 
                     <option value="">Select Asset</option>
 
-                    {(assets || []).filter(a => a.status === 'active').map(a => <option key={a.id} value={a.id}>{a.propertyNumber} - {a.description}</option>)}
+                    {(assets || []).filter(a => a.status === 'Active').map(a => <option key={a.id} value={a.id}>{a.propertyNumber} - {a.description}</option>)}
 
                   </select>
 
@@ -3369,7 +3732,7 @@ export default function App() {
 
                     <option value="">Select Asset</option>
 
-                    {(assets || []).filter(a => a.status === 'active').map(a => <option key={a.id} value={a.id}>{a.propertyNumber} - {a.description} (₱{a.netBookValue?.toLocaleString()})</option>)}
+                    {(assets || []).filter(a => a.status === 'Active').map(a => <option key={a.id} value={a.id}>{a.propertyNumber} - {a.description} (₱{a.netBookValue?.toLocaleString()})</option>)}
 
                   </select>
 
