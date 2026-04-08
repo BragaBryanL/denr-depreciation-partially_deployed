@@ -170,10 +170,10 @@ export default function App() {
       setError(null);
       
       if (isProduction) {
-        // Production mode - use localStorage only to prevent Accountable Officer field overwrites
-        console.log('Production mode - using localStorage to prevent Accountable Officer field overwrites');
+        // Production mode - use localStorage with cross-device sync
+        console.log('Production mode - using localStorage with cross-device sync');
         
-        // Use localStorage only to prevent Firebase overwrites
+        // Use localStorage with cross-device synchronization
         const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
         if (localAssets.length > 0) {
           const transformedLocalAssets = localAssets.map(asset => ({
@@ -215,6 +215,34 @@ export default function App() {
           setError(null);
         } else {
           setError('No assets found. Please import some assets to get started.');
+        }
+        
+        // Cross-device sync: Check Firebase for newer data and merge with localStorage
+        if (isProduction) {
+          try {
+            const result = await getAssets();
+            if (result.success && result.data.length > 0) {
+              console.log('Cross-device sync: Firebase has newer data');
+              const firebaseAssets = result.data;
+              
+              // Merge Firebase data with localStorage data
+              const mergedAssets = [...firebaseAssets];
+              
+              // Add localStorage assets that aren't in Firebase
+              localAssets.forEach(localAsset => {
+                if (!firebaseAssets.find(fa => fa.id === localAsset.id)) {
+                  mergedAssets.push(localAsset);
+                }
+              });
+              
+              // Save merged data to localStorage and update state
+              localStorage.setItem('denr_assets', JSON.stringify(mergedAssets));
+              setAssets(mergedAssets);
+              console.log('Cross-device sync completed: Total assets:', mergedAssets.length);
+            }
+          } catch (error) {
+            console.log('Cross-device sync failed:', error);
+          }
         }
       } else {
         // Development mode - connect to local server
