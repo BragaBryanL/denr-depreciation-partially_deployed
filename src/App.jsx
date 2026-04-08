@@ -368,13 +368,11 @@ export default function App() {
   };
 
 
-
-  // Fetch all data
   const fetchAllData = async () => {
     try {
       if (isProduction) {
-        // Production mode - use Firebase for asset records
-        console.log('Production mode - using Firebase for asset records');
+        // Production mode - using localStorage to prevent Accountable Officer field from vanishing
+        console.log('Production mode - using localStorage to prevent Accountable Officer field overwrites');
         
         // Fetch from Firebase collections
         try {
