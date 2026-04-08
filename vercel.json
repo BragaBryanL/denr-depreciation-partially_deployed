@@ -2,5 +2,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "version": "2025-04-08-15-03"
+  "version": 2,
+  "framework": null,
+  "git": {
+    "deploymentEnabled": true
+  }
 }
