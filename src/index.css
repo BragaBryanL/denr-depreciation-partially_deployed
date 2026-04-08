@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Test if Tailwind is working */
+body {
+  background-color: #f0fdf4;
+  min-height: 100vh;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Fallback styles in case Tailwind fails to load */
+.bg-green-500 {
+  background-color: #22c55e !important;
+}
+
+.text-white {
+  color: white !important;
+}
