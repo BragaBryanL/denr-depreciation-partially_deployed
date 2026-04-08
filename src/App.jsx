@@ -1862,20 +1862,7 @@ export default function App() {
     });
     unsubscribers.push(historyUnsub);
 
-    // Depreciation log real-time listener
-    const depreciationUnsub = subscribeToDepreciationLog((logData, error) => {
-      if (error) {
-        console.error('Real-time depreciation error:', error);
-        return;
-      }
-      
-      if (logData) {
-        console.log('Real-time depreciation update received:', logData.length);
-        setDepreciationLog(logData);
-        localStorage.setItem('denr_depreciation_log', JSON.stringify(logData));
-      }
-    });
-    unsubscribers.push(depreciationUnsub);
+    // Depreciation log real-time listener - completely disabled
 
     // Transfers real-time listener
     const transfersUnsub = subscribeToTransfers((transfersData, error) => {
