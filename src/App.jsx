@@ -1852,11 +1852,11 @@ export default function App() {
 
 
 
-  // Set up real-time Firebase listeners for cross-device synchronization
-  useEffect(() => {
-    if (!isProduction) return; // Only enable in production with Firebase
-
-    console.log('Setting up real-time Firebase listeners...');
+  // Real-time Firebase listeners disabled to prevent Accountable Officer field overwrites
+  // useEffect(() => {
+  //   if (!isProduction) return; // Real-time listeners completely disabled
+  // 
+  //   console.log('Real-time Firebase listeners disabled...');
 
     const unsubscribers = [];
 

@@ -70,7 +70,7 @@ export default function Navbar() {
               <div className="hidden w-full h-full bg-green-700 items-center justify-center text-white font-bold text-xl">D</div>
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-white font-bold text-lg leading-tight">DENR-PENRO</h1>
+              <h1 className="text-white font-bold text-lg leading-tight">TBD.....</h1>
               <p className="text-green-200 text-xs">Property Depreciation System</p>
             </div>
           </div>
