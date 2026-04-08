@@ -1850,49 +1850,7 @@ export default function App() {
 
 
 
-  // Real-time Firebase listeners disabled to prevent Accountable Officer field overwrites
-        return;
-      }
-      
-      if (historyData) {
-        console.log('Real-time history update received:', historyData.length);
-        setAssetHistory(historyData);
-        localStorage.setItem('denr_asset_history', JSON.stringify(historyData));
-      }
-    });
-    unsubscribers.push(historyUnsub);
-
-    // Depreciation log real-time listener - completely disabled
-
-    // Transfers real-time listener
-    const transfersUnsub = subscribeToTransfers((transfersData, error) => {
-      if (error) {
-        console.error('Real-time transfers error:', error);
-        return;
-      }
-      
-      if (transfersData) {
-        console.log('Real-time transfers update received:', transfersData.length);
-        setTransfers(transfersData);
-        localStorage.setItem('denr_transfers', JSON.stringify(transfersData));
-      }
-    });
-    unsubscribers.push(transfersUnsub);
-
-    // Disposals real-time listener
-    const disposalsUnsub = subscribeToDisposals((disposalsData, error) => {
-      if (error) {
-        console.error('Real-time disposals error:', error);
-        return;
-      }
-      
-      if (disposalsData) {
-        console.log('Real-time disposals update received:', disposalsData.length);
-        setDisposals(disposalsData);
-        localStorage.setItem('denr_disposals', JSON.stringify(disposalsData));
-      }
-    });
-    unsubscribers.push(disposalsUnsub);
+    // Disposals real-time listener - completely removed
 
     // Cleanup function
     return () => {
