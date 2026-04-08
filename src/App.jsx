@@ -1902,6 +1902,10 @@ export default function App() {
         setAssetHistory([]);
         showNotification(`Asset history cleared successfully!`, "success");
         fetchAllData(); // Refresh to update the count
+        // Auto-refresh property list to show latest Accountable Officer changes
+        setTimeout(() => {
+          fetchAssets();
+        }, 1000);
       } else {
         // Development mode - use local server
         const response = await fetch("http://localhost:4000/api/asset-history/clear", {
@@ -1913,6 +1917,10 @@ export default function App() {
           console.log('Asset history cleared:', result);
           showNotification(`Asset history cleared successfully!`, "success");
           fetchAllData(); // Refresh to update the count
+          // Auto-refresh property list to show latest Accountable Officer changes
+          setTimeout(() => {
+            fetchAssets();
+          }, 1000);
         } else {
           const errorText = await response.text();
           console.error('Clear history error:', errorText);
