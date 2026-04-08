@@ -170,177 +170,51 @@ export default function App() {
       setError(null);
       
       if (isProduction) {
-        // Production mode - prioritize Firebase for cross-device sync
-        console.log('Running in production mode - prioritizing Firebase for cross-device sync');
+        // Production mode - use localStorage only to prevent Accountable Officer field overwrites
+        console.log('Production mode - using localStorage to prevent Accountable Officer field overwrites');
         
-        // Try Firebase first (for cross-device sync)
-        try {
-          const result = await getAssets();
-          console.log('Firebase result:', result);
+        // Use localStorage only to prevent Firebase overwrites
+        const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
+        if (localAssets.length > 0) {
+          const transformedLocalAssets = localAssets.map(asset => ({
+            id: asset.id,
+            propertyNumber: asset.propertyNumber || '',
+            entityName: asset.entityName || '',
+            location: asset.office || '',
+            office: asset.office || '',
+            accountableOfficer: asset.accountableOfficer || '',
+            status: asset.status || 'Active',
+            dateAcquired: asset.dateAcquired,
+            originalCost: asset.originalCost || asset.unitCost || 0,
+            current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
+            usefulLife: asset.usefulLife || 5,
+            depreciationRate: asset.depreciationRate || 0,
+            depreciableAmount: asset.depreciableAmount || 0,
+            annualDepreciation: asset.annualDepreciation || 0,
+            accumulatedDepreciation: asset.accumulatedDepreciation || 0,
+            netBookValue: asset.netBookValue || asset.unitCost || 0,
+            remarks: asset.remarks || '',
+            description: asset.description || '',
+            ppeClass: asset.ppeClass || '',
+            accountCode: asset.accountCode || '',
+            quantity: asset.quantity || 1,
+            unitCost: asset.unitCost || 0,
+            totalCost: asset.totalCost || 0,
+            residualValue: asset.residualValue || 0,
+            reference: asset.reference || '',
+            receipt: asset.receipt || '',
+            fundCluster: asset.fundCluster || '',
+            selected: false,
+            created_at: asset.createdAt,
+            updated_at: asset.updatedAt
+          }));
           
-          if (result.success && result.data.length > 0) {
-            console.log('Firebase fetch successful - using Firebase data');
-            // Transform Firebase data to match your app's expected format
-            const transformedAssets = result.data.map(asset => {
-              // Fix useful life based on account code (Land should have no useful life)
-              let usefulLife = asset.usefulLife;
-              if (asset.accountCode === '10601010' || asset.accountCode === '10602020' || asset.accountCode === '10699010' || asset.accountCode === '10699030') {
-                usefulLife = ''; // Land and Construction in Progress have no useful life
-              } else if (asset.accountCode === '10602990') {
-                usefulLife = usefulLife || 20; // Other Land Improvements: 20 years
-              } else if (asset.accountCode === '10603040') {
-                usefulLife = usefulLife || 15; // Water Supply Systems: 15 years
-              } else if (asset.accountCode === '10603050') {
-                usefulLife = usefulLife || 20; // Power Supply Systems: 20 years
-              } else if (asset.accountCode === '10604010') {
-                usefulLife = usefulLife || 30; // Buildings: 30 years
-              } else if (asset.accountCode === '10604990') {
-                usefulLife = usefulLife || 20; // Other Structures: 20 years
-              } else if (asset.accountCode === '10605020' || asset.accountCode === '10605030' || asset.accountCode === '10605070' || asset.accountCode === '10605090') {
-                usefulLife = usefulLife || 5; // Office/ICT/Communication/Disaster Equipment: 5 years
-              } else if (asset.accountCode === '10605140') {
-                usefulLife = usefulLife || 7; // Technical and Scientific Equipment: 7 years
-              } else if (asset.accountCode === '10606010') {
-                usefulLife = usefulLife || 7; // Motor Vehicles: 7 years
-              } else if (asset.accountCode === '10607010') {
-                usefulLife = usefulLife || 10; // Furniture and Fixtures: 10 years
-              } else {
-                usefulLife = usefulLife || 5; // Default fallback
-              }
-              
-              return {
-                id: asset.id,
-                propertyNumber: asset.propertyNumber || '',
-                entityName: asset.entityName || asset.asset_name || '',
-                assetType: asset.assetType || asset.asset_type || 'Equipment',
-                location: asset.location || '',
-                office: asset.office || '',
-                status: asset.status || 'Active',
-                dateAcquired: asset.dateAcquired || asset.createdAt?.split('T')[0],
-                originalCost: asset.originalCost || asset.purchase_cost || 0,
-                current_value: asset.current_value || asset.originalCost || asset.purchase_cost || 0,
-                usefulLife: usefulLife,
-                depreciationRate: asset.depreciationRate || 0,
-                depreciableAmount: asset.depreciableAmount || 0,
-                annualDepreciation: asset.annualDepreciation || 0,
-                accumulatedDepreciation: asset.accumulatedDepreciation || 0,
-                netBookValue: asset.netBookValue || asset.current_value || asset.originalCost || asset.purchase_cost || 0,
-                remarks: asset.remarks || '',
-                description: asset.description || '',
-                ppeClass: asset.ppeClass || '',
-                accountCode: asset.accountCode || '',
-                quantity: asset.quantity || 1,
-                unitCost: asset.unitCost || 0,
-                totalCost: asset.totalCost || 0,
-                residualValue: asset.residualValue || 0,
-                reference: asset.reference || '',
-                receipt: asset.receipt || '',
-                fundCluster: asset.fundCluster || '',
-                selected: false,
-                created_at: asset.createdAt,
-                updated_at: asset.updatedAt
-              };
-            });
-            
-            // Save to localStorage for offline access
-            localStorage.setItem('denr_assets', JSON.stringify(result.data));
-            
-            console.log('Loaded from Firebase:', transformedAssets.length, 'assets');
-            setAssets(transformedAssets);
-            setSelectedAssets([]);
-            
-          } else {
-            console.log('Firebase has no data, checking localStorage...');
-            
-            // Fallback to localStorage if Firebase is empty
-            const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
-            if (localAssets.length > 0) {
-              const transformedLocalAssets = localAssets.map(asset => ({
-                id: asset.id,
-                propertyNumber: asset.propertyNumber || '',
-                entityName: asset.entityName || '',
-                location: asset.office || '',
-                office: asset.office || '',
-                accountableOfficer: asset.accountableOfficer || '',
-                status: asset.status || 'Active',
-                dateAcquired: asset.dateAcquired,
-                originalCost: asset.originalCost || asset.unitCost || 0,
-                current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
-                usefulLife: asset.usefulLife || 5,
-                depreciationRate: asset.depreciationRate || 0,
-                depreciableAmount: asset.depreciableAmount || 0,
-                annualDepreciation: asset.annualDepreciation || 0,
-                accumulatedDepreciation: asset.accumulatedDepreciation || 0,
-                netBookValue: asset.netBookValue || asset.unitCost || 0,
-                remarks: asset.remarks || '',
-                description: asset.description || '',
-                ppeClass: asset.ppeClass || '',
-                accountCode: asset.accountCode || '',
-                quantity: asset.quantity || 1,
-                unitCost: asset.unitCost || 0,
-                totalCost: asset.totalCost || 0,
-                residualValue: asset.residualValue || 0,
-                reference: asset.reference || '',
-                receipt: asset.receipt || '',
-                fundCluster: asset.fundCluster || '',
-                selected: false,
-                created_at: asset.createdAt,
-                updated_at: asset.updatedAt
-              }));
-              
-              console.log('Loaded from localStorage:', transformedLocalAssets.length, 'assets');
-              setAssets(transformedLocalAssets);
-              setSelectedAssets([]);
-              setError('Showing locally saved data. Firebase connection unavailable.');
-            } else {
-              setError('No assets found. Please import some assets to get started.');
-            }
-          }
-        } catch (firebaseError) {
-          console.error('Firebase connection error:', firebaseError);
-          
-          // Fallback to localStorage if Firebase fails
-          const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
-          if (localAssets.length > 0) {
-            const transformedLocalAssets = localAssets.map(asset => ({
-              id: asset.id,
-              propertyNumber: asset.propertyNumber || '',
-              entityName: asset.entityName || '',
-              location: asset.office || '',
-              office: asset.office || '',
-              accountableOfficer: asset.accountableOfficer || '',
-              status: asset.status || 'Active',
-              dateAcquired: asset.dateAcquired,
-              originalCost: asset.originalCost || asset.unitCost || 0,
-              current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
-              usefulLife: asset.usefulLife || 5,
-              depreciationRate: asset.depreciationRate || 0,
-              depreciableAmount: asset.depreciableAmount || 0,
-              annualDepreciation: asset.annualDepreciation || 0,
-              accumulatedDepreciation: asset.accumulatedDepreciation || 0,
-              netBookValue: asset.netBookValue || asset.unitCost || 0,
-              remarks: asset.remarks || '',
-              description: asset.description || '',
-              ppeClass: asset.ppeClass || '',
-              accountCode: asset.accountCode || '',
-              quantity: asset.quantity || 1,
-              unitCost: asset.unitCost || 0,
-              totalCost: asset.totalCost || 0,
-              residualValue: asset.residualValue || 0,
-              reference: asset.reference || '',
-              receipt: asset.receipt || '',
-              fundCluster: asset.fundCluster || '',
-              selected: false,
-              created_at: asset.createdAt,
-              updated_at: asset.updatedAt
-            }));
-            
-            setAssets(transformedLocalAssets);
-            setSelectedAssets([]);
-            setError('Showing locally saved data. Firebase connection unavailable.');
-          } else {
-            setError('Failed to connect to Firebase database. Please check your configuration.');
-          }
+          console.log('Loaded from localStorage:', transformedLocalAssets.length, 'assets');
+          setAssets(transformedLocalAssets);
+          setSelectedAssets([]);
+          setError(null);
+        } else {
+          setError('No assets found. Please import some assets to get started.');
         }
       } else {
         // Development mode - connect to local server
