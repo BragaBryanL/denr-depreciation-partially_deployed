@@ -1852,32 +1852,16 @@ export default function App() {
 
     // Disposals real-time listener - completely removed
 
-    // Cleanup function
-    return () => {
-      console.log('Cleaning up real-time listeners...');
-      unsubscribers.forEach(unsub => unsub());
-    };
-  }, [isProduction]);
-
 
 
   // Format date
-
   const formatDate = (dateStr) => {
-
     if (!dateStr) return '-';
-
-    
-
     // If it's just a year, return as-is
-
     if (/^\d{4}$/.test(dateStr.trim())) {
-
       return dateStr.trim();
-
     }
 
-    
 
     // Otherwise format full date
 
