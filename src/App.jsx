@@ -651,15 +651,49 @@ export default function App() {
       if (success) {
         showNotification(`Asset status changed to ${newStatus}!`, "success");
         
-        // Update localStorage immediately to ensure display refresh
+        // Update localStorage immediately
         const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
         const updatedLocalAssets = localAssets.map(a => 
           a.id === asset.id ? { ...a, status: newStatus } : a
         );
         localStorage.setItem('denr_assets', JSON.stringify(updatedLocalAssets));
         
-        // Then fetch to ensure sync
-        fetchAssets();
+        // Update state directly to reflect the change immediately
+        const transformedAssets = updatedLocalAssets.map(asset => ({
+          id: asset.id,
+          propertyNumber: asset.propertyNumber || '',
+          entityName: asset.entityName || '',
+          location: asset.office || '',
+          office: asset.office || '',
+          accountableOfficer: asset.accountableOfficer || '',
+          status: asset.status || 'Active',
+          dateAcquired: asset.dateAcquired,
+          originalCost: asset.originalCost || asset.unitCost || 0,
+          current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
+          usefulLife: asset.usefulLife || 5,
+          depreciationRate: asset.depreciationRate || 0,
+          depreciableAmount: asset.depreciableAmount || 0,
+          annualDepreciation: asset.annualDepreciation || 0,
+          accumulatedDepreciation: asset.accumulatedDepreciation || 0,
+          netBookValue: asset.netBookValue || asset.unitCost || 0,
+          remarks: asset.remarks || '',
+          description: asset.description || '',
+          ppeClass: asset.ppeClass || '',
+          accountCode: asset.accountCode || '',
+          quantity: asset.quantity || 1,
+          unitCost: asset.unitCost || 0,
+          totalCost: asset.totalCost || 0,
+          residualValue: asset.residualValue || 0,
+          reference: asset.reference || '',
+          receipt: asset.receipt || '',
+          fundCluster: asset.fundCluster || '',
+          selected: false,
+          created_at: asset.createdAt,
+          updated_at: asset.updatedAt
+        }));
+        
+        setAssets(transformedAssets);
+        setSelectedAssets([]);
       } else {
         showNotification("Failed to update asset status. Please try again.", "error");
       }
