@@ -70,7 +70,7 @@ export default function App() {
 
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false); // Set to true to enable maintenance mode
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(true); // Set to true to enable maintenance mode
 
   const [searchTerm, setSearchTerm] = useState("");
 
