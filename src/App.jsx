@@ -563,7 +563,7 @@ export default function App() {
           if (isProduction) {
             // Production mode - update in Firebase
             const updatedAsset = { ...asset, status: newStatus };
-            const result = await updateAsset(updatedAsset);
+            const result = await updateAsset(asset.id, updatedAsset);
             success = result.success;
           } else {
             // Development mode - use local server
@@ -634,7 +634,7 @@ export default function App() {
           updated_at: new Date().toISOString()
         };
         
-        const result = await updateAsset(updatedAsset);
+        const result = await updateAsset(asset.id, updatedAsset);
         success = result.success;
       } else {
         // Development mode - use local server
