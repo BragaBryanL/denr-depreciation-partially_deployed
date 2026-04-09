@@ -82,57 +82,7 @@ const Maintenance = () => {
             </ul>
           </div>
 
-          {/* Contact Information */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-3">Need assistance?</h3>
-            <div className="grid md:grid-cols-2 gap-4 text-gray-700">
-              <div>
-                <p><strong>System Administrator:</strong></p>
-                <p>Email: admin@denr-penro.gov.ph</p>
-                <p>Phone: (02) 1234-5678</p>
-              </div>
-              <div>
-                <p><strong>IT Support:</strong></p>
-                <p>Email: it.support@denr-penro.gov.ph</p>
-                <p>Phone: (02) 8765-4321</p>
-              </div>
-            </div>
           </div>
-
-          {/* Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm text-gray-600">
-              <span>Maintenance Progress</span>
-              <span>65% Complete</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div className="bg-gradient-to-r from-orange-400 to-orange-600 h-3 rounded-full" style={{ width: '65%' }}></div>
-            </div>
-          </div>
-
-          {/* Refresh Button */}
-          <div className="text-center pt-4">
-            <button 
-              onClick={() => window.location.reload()}
-              className="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transition-all duration-200 hover:scale-105"
-            >
-              Check System Status
-            </button>
-            <p className="text-gray-500 text-sm mt-2">
-              Click to refresh and check if maintenance is complete
-            </p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center pt-6 border-t border-gray-200">
-          <p className="text-gray-500 text-sm">
-            © 2024 Department of Environment and Natural Resources - Provincial Environment and Natural Resources Office
-          </p>
-          <p className="text-gray-400 text-xs mt-1">
-            Property, Plant & Equipment Depreciation System v2.0
-          </p>
-        </div>
       </div>
     </div>
   );
