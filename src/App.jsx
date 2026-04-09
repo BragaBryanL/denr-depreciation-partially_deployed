@@ -6,6 +6,8 @@ import AssetForm from "./AssetForm";
 
 import StatsCards from "./StatsCards";
 
+import Maintenance from "./Maintenance";
+
 import NotificationContainer from "./components/Notification";
 
 import { showNotification, showConfirmDialog } from "./utils/notificationHelpers";
@@ -67,6 +69,8 @@ export default function App() {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const [showAddForm, setShowAddForm] = useState(false);
+
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false); // Set to true to enable maintenance mode
 
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -2317,19 +2321,24 @@ export default function App() {
 
     <div className="scroll-smooth bg-gradient-to-br from-green-50 via-gray-50 to-green-100 min-h-screen">
 
-      <NotificationContainer 
+      {/* Show maintenance page if maintenance mode is enabled */}
+      {isMaintenanceMode ? (
+        <Maintenance />
+      ) : (
+        <>
+          <NotificationContainer 
 
-        notifications={notifications} 
+            notifications={notifications} 
 
-        setNotifications={setNotifications} 
+            setNotifications={setNotifications} 
 
-        confirmDialog={confirmDialog} 
+            confirmDialog={confirmDialog} 
 
-        setConfirmDialog={setConfirmDialog} 
+            setConfirmDialog={setConfirmDialog} 
 
-      />
+          />
 
-      <Navbar />
+          <Navbar />
 
 
 
@@ -4172,7 +4181,8 @@ export default function App() {
         </div>
 
       )}
-
+        </>
+      )}
     </div>
 
   );
