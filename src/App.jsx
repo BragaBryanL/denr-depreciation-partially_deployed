@@ -662,8 +662,6 @@ export default function App() {
             if (propertyNumberCell && propertyNumberCell.textContent.includes(asset.propertyNumber)) {
               // Found the correct row, update the status
               cell.textContent = newStatus;
-              cell.style.color = newStatus === 'Unserviceable' ? 'red' : 'green';
-              cell.style.fontWeight = 'bold';
             }
           }
         }
