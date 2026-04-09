@@ -64,6 +64,8 @@ export default function App() {
 
   const [error, setError] = useState(null);
 
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
   const [showAddForm, setShowAddForm] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -172,6 +174,55 @@ export default function App() {
       if (isProduction) {
         // Production mode - use localStorage with cross-device sync
         console.log('Production mode - using localStorage with cross-device sync');
+        
+        // Skip Firebase fetch if we're currently updating status to prevent overwrites
+        if (isUpdatingStatus) {
+          console.log('Skipping Firebase fetch during status update');
+          const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
+          if (localAssets.length > 0) {
+            const transformedLocalAssets = localAssets.map(asset => ({
+              id: asset.id,
+              propertyNumber: asset.propertyNumber || '',
+              entityName: asset.entityName || '',
+              location: asset.office || '',
+              office: asset.office || '',
+              accountableOfficer: asset.accountableOfficer || '',
+              status: asset.status || 'Active',
+              dateAcquired: asset.dateAcquired,
+              originalCost: asset.originalCost || asset.unitCost || 0,
+              current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
+              usefulLife: asset.usefulLife || 5,
+              depreciationRate: asset.depreciationRate || 0,
+              depreciableAmount: asset.depreciableAmount || 0,
+              annualDepreciation: asset.annualDepreciation || 0,
+              accumulatedDepreciation: asset.accumulatedDepreciation || 0,
+              netBookValue: asset.netBookValue || asset.unitCost || 0,
+              remarks: asset.remarks || '',
+              description: asset.description || '',
+              ppeClass: asset.ppeClass || '',
+              accountCode: asset.accountCode || '',
+              quantity: asset.quantity || 1,
+              unitCost: asset.unitCost || 0,
+              totalCost: asset.totalCost || 0,
+              residualValue: asset.residualValue || 0,
+              reference: asset.reference || '',
+              receipt: asset.receipt || '',
+              fundCluster: asset.fundCluster || '',
+              selected: false,
+              created_at: asset.createdAt,
+              updated_at: asset.updatedAt
+            }));
+            
+            console.log('Loaded from localStorage during status update:', transformedLocalAssets.length, 'assets');
+            setAssets(transformedLocalAssets);
+            setSelectedAssets([]);
+            setError(null);
+          } else {
+            setError('No assets found. Please import some assets to get started.');
+          }
+          setLoading(false);
+          return;
+        }
         
         // Use localStorage with cross-device synchronization
         const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
@@ -596,6 +647,9 @@ export default function App() {
     const currentStatus = asset.status || 'Active';
     const newStatus = currentStatus === 'Serviceable' ? 'Unserviceable' : 'Serviceable';
     
+    // Set flag to prevent fetchAssets from overwriting our changes
+    setIsUpdatingStatus(true);
+    
     try {
       let success = false;
       
@@ -700,6 +754,9 @@ export default function App() {
     } catch (error) {
       console.error("Error updating asset status:", error);
       showNotification("Error updating asset status. Please try again.", "error");
+    } finally {
+      // Reset the flag after the update is complete
+      setTimeout(() => setIsUpdatingStatus(false), 1000);
     }
   };
 
