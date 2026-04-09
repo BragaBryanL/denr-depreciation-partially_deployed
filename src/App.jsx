@@ -549,12 +549,13 @@ export default function App() {
     );
   };
 
-  // Toggle asset status between Serviceable and Unserviceable
+  // Toggle asset status between Serviceable and Unserviceable (with confirmation)
   const toggleAssetStatus = async (asset) => {
-    const newStatus = asset.status === 'Serviceable' ? 'Unserviceable' : 'Serviceable';
+    const currentStatus = asset.status || 'Active';
+    const newStatus = currentStatus === 'Serviceable' ? 'Unserviceable' : 'Serviceable';
     
     showConfirmDialog(
-      `Are you sure you want to change the status from "${asset.status}" to "${newStatus}"?`,
+      `Are you sure you want to change the status from "${currentStatus}" to "${newStatus}"?`,
       async () => {
         try {
           let success = false;
@@ -588,6 +589,43 @@ export default function App() {
         }
       }
     );
+  };
+
+  // Toggle asset status immediately without confirmation
+  const toggleAssetStatusImmediate = async (asset) => {
+    const currentStatus = asset.status || 'Active';
+    const newStatus = currentStatus === 'Serviceable' ? 'Unserviceable' : 'Serviceable';
+    
+    try {
+      let success = false;
+      
+      if (isProduction) {
+        // Production mode - update in Firebase
+        const updatedAsset = { ...asset, status: newStatus };
+        const result = await updateAsset(updatedAsset);
+        success = result.success;
+      } else {
+        // Development mode - use local server
+        const response = await fetch(`http://localhost:4000/api/assets/${asset.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ...asset, status: newStatus })
+        });
+        success = response.ok;
+      }
+      
+      if (success) {
+        showNotification(`Asset status changed to ${newStatus}!`, "success");
+        fetchAssets();
+      } else {
+        showNotification("Failed to update asset status. Please try again.", "error");
+      }
+    } catch (error) {
+      console.error("Error updating asset status:", error);
+      showNotification("Error updating asset status. Please try again.", "error");
+    }
   };
 
 
@@ -2504,7 +2542,7 @@ export default function App() {
 
                           <td className="px-1 py-2">
 
-                            <div className="flex gap-0.5 justify-center flex-wrap">
+                            <div className="flex flex-col gap-0.5 justify-center">
 
                               <button onClick={() => { setEditingAsset(asset); setShowAddForm(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Edit">
 
@@ -2524,7 +2562,7 @@ export default function App() {
 
                               </button>
 
-                              <button onClick={() => toggleAssetStatus(asset)} className="p-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200" title="Toggle Status (Serviceable/Unserviceable)">
+                              <button onClick={() => toggleAssetStatusImmediate(asset)} className="p-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200" title="Toggle Status (Serviceable/Unserviceable)">
 
                                 <ArrowsRightLeftIcon className="w-3 h-3" />
 
