@@ -50,9 +50,7 @@ import {
 
   XMarkIcon,
 
-  ArrowPathIcon,
-
-  SwitchHorizontalIcon
+  ArrowPathIcon
 
 } from "@heroicons/react/24/outline";
 
@@ -2528,7 +2526,7 @@ export default function App() {
 
                               <button onClick={() => toggleAssetStatus(asset)} className="p-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200" title="Toggle Status (Serviceable/Unserviceable)">
 
-                                <SwitchHorizontalIcon className="w-3 h-3" />
+                                <ArrowsRightLeftIcon className="w-3 h-3" />
 
                               </button>
 
