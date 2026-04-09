@@ -650,6 +650,15 @@ export default function App() {
       
       if (success) {
         showNotification(`Asset status changed to ${newStatus}!`, "success");
+        
+        // Update localStorage immediately to ensure display refresh
+        const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
+        const updatedLocalAssets = localAssets.map(a => 
+          a.id === asset.id ? { ...a, status: newStatus } : a
+        );
+        localStorage.setItem('denr_assets', JSON.stringify(updatedLocalAssets));
+        
+        // Then fetch to ensure sync
         fetchAssets();
       } else {
         showNotification("Failed to update asset status. Please try again.", "error");
