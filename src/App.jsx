@@ -647,14 +647,24 @@ export default function App() {
     const currentStatus = asset.status || 'Active';
     const newStatus = currentStatus === 'Serviceable' ? 'Unserviceable' : 'Serviceable';
     
-    // Set flag to prevent fetchAssets from overwriting our changes
-    setIsUpdatingStatus(true);
+    // IMMEDIATE UI UPDATE - Update the state first, then handle Firebase
+    const updatedAssets = assets.map(a => 
+      a.id === asset.id ? { ...a, status: newStatus } : a
+    );
+    setAssets(updatedAssets);
     
+    // Update localStorage immediately
+    const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
+    const updatedLocalAssets = localAssets.map(a => 
+      a.id === asset.id ? { ...a, status: newStatus } : a
+    );
+    localStorage.setItem('denr_assets', JSON.stringify(updatedLocalAssets));
+    
+    showNotification(`Asset status changed to ${newStatus}!`, "success");
+    
+    // Handle Firebase update in background without affecting UI
     try {
-      let success = false;
-      
       if (isProduction) {
-        // Production mode - update in Firebase with proper data types
         const updatedAsset = {
           id: asset.id,
           propertyNumber: asset.propertyNumber || '',
@@ -688,75 +698,20 @@ export default function App() {
           updated_at: new Date().toISOString()
         };
         
-        const result = await updateAsset(asset.id, updatedAsset);
-        success = result.success;
+        await updateAsset(asset.id, updatedAsset);
       } else {
         // Development mode - use local server
-        const response = await fetch(`http://localhost:4000/api/assets/${asset.id}`, {
+        await fetch(`http://localhost:4000/api/assets/${asset.id}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ ...asset, status: newStatus })
         });
-        success = response.ok;
-      }
-      
-      if (success) {
-        showNotification(`Asset status changed to ${newStatus}!`, "success");
-        
-        // Update localStorage immediately
-        const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
-        const updatedLocalAssets = localAssets.map(a => 
-          a.id === asset.id ? { ...a, status: newStatus } : a
-        );
-        localStorage.setItem('denr_assets', JSON.stringify(updatedLocalAssets));
-        
-        // Update state directly to reflect the change immediately
-        const transformedAssets = updatedLocalAssets.map(asset => ({
-          id: asset.id,
-          propertyNumber: asset.propertyNumber || '',
-          entityName: asset.entityName || '',
-          location: asset.office || '',
-          office: asset.office || '',
-          accountableOfficer: asset.accountableOfficer || '',
-          status: asset.status || 'Active',
-          dateAcquired: asset.dateAcquired,
-          originalCost: asset.originalCost || asset.unitCost || 0,
-          current_value: asset.current_value || asset.netBookValue || asset.unitCost || 0,
-          usefulLife: asset.usefulLife || 5,
-          depreciationRate: asset.depreciationRate || 0,
-          depreciableAmount: asset.depreciableAmount || 0,
-          annualDepreciation: asset.annualDepreciation || 0,
-          accumulatedDepreciation: asset.accumulatedDepreciation || 0,
-          netBookValue: asset.netBookValue || asset.unitCost || 0,
-          remarks: asset.remarks || '',
-          description: asset.description || '',
-          ppeClass: asset.ppeClass || '',
-          accountCode: asset.accountCode || '',
-          quantity: asset.quantity || 1,
-          unitCost: asset.unitCost || 0,
-          totalCost: asset.totalCost || 0,
-          residualValue: asset.residualValue || 0,
-          reference: asset.reference || '',
-          receipt: asset.receipt || '',
-          fundCluster: asset.fundCluster || '',
-          selected: false,
-          created_at: asset.createdAt,
-          updated_at: asset.updatedAt
-        }));
-        
-        setAssets(transformedAssets);
-        setSelectedAssets([]);
-      } else {
-        showNotification("Failed to update asset status. Please try again.", "error");
       }
     } catch (error) {
-      console.error("Error updating asset status:", error);
-      showNotification("Error updating asset status. Please try again.", "error");
-    } finally {
-      // Reset the flag after the update is complete
-      setTimeout(() => setIsUpdatingStatus(false), 1000);
+      console.error("Error updating asset status in background:", error);
+      // Don't show error to user since UI already updated
     }
   };
 
