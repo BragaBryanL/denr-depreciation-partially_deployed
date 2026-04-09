@@ -50,7 +50,9 @@ import {
 
   XMarkIcon,
 
-  ArrowPathIcon
+  ArrowPathIcon,
+
+  SwitchHorizontalIcon
 
 } from "@heroicons/react/24/outline";
 
@@ -544,6 +546,47 @@ export default function App() {
         } finally {
           // Always reset deletion state
           setIsDeleting(false);
+        }
+      }
+    );
+  };
+
+  // Toggle asset status between Serviceable and Unserviceable
+  const toggleAssetStatus = async (asset) => {
+    const newStatus = asset.status === 'Serviceable' ? 'Unserviceable' : 'Serviceable';
+    
+    showConfirmDialog(
+      `Are you sure you want to change the status from "${asset.status}" to "${newStatus}"?`,
+      async () => {
+        try {
+          let success = false;
+          
+          if (isProduction) {
+            // Production mode - update in Firebase
+            const updatedAsset = { ...asset, status: newStatus };
+            const result = await updateAsset(updatedAsset);
+            success = result.success;
+          } else {
+            // Development mode - use local server
+            const response = await fetch(`http://localhost:4000/api/assets/${asset.id}`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ ...asset, status: newStatus })
+            });
+            success = response.ok;
+          }
+          
+          if (success) {
+            showNotification(`Asset status changed to ${newStatus}!`, "success");
+            fetchAssets();
+          } else {
+            showNotification("Failed to update asset status. Please try again.", "error");
+          }
+        } catch (error) {
+          console.error("Error updating asset status:", error);
+          showNotification("Error updating asset status. Please try again.", "error");
         }
       }
     );
@@ -2463,7 +2506,7 @@ export default function App() {
 
                           <td className="px-1 py-2">
 
-                            <div className="flex gap-0.5 justify-center">
+                            <div className="flex gap-0.5 justify-center flex-wrap">
 
                               <button onClick={() => { setEditingAsset(asset); setShowAddForm(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Edit">
 
@@ -2480,6 +2523,12 @@ export default function App() {
                               <button onClick={() => handleGenerateCOA(asset)} className="p-1 bg-amber-100 text-amber-600 rounded hover:bg-amber-200" title="Generate COA Form">
 
                                 <DocumentChartBarIcon className="w-3 h-3" />
+
+                              </button>
+
+                              <button onClick={() => toggleAssetStatus(asset)} className="p-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200" title="Toggle Status (Serviceable/Unserviceable)">
+
+                                <SwitchHorizontalIcon className="w-3 h-3" />
 
                               </button>
 
