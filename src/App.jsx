@@ -2163,10 +2163,6 @@ export default function App() {
 
             <div>
 
-              <h1 className="text-4xl font-bold text-green-800">DENR-PENRO</h1>
-
-              <p className="text-gray-600">Property, Plant & Equipment Depreciation System</p>
-
             </div>
 
             <div className="flex gap-3 mt-4 md:mt-0">
