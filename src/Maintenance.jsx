@@ -53,21 +53,7 @@ const Maintenance = () => {
             DENR-PENRO Property Depreciation System
           </p>
           
-          {/* Simple Environment Message */}
-          <div className="bg-green-50 border border-green-200 rounded-xl p-6">
-            <p className="text-gray-700 text-lg leading-relaxed">
-              We're working to improve our system to better serve our environment and community.
-              Thank you for your patience during this maintenance period.
-            </p>
-          </div>
-          
-          {/* Animated Environment Elements */}
-          <div className="mt-8 flex justify-center space-x-8">
-            <div className="text-green-600 text-4xl animate-bounce" style={{ animationDuration: '2s' }}> trees</div>
-            <div className="text-blue-600 text-4xl animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}> water</div>
-            <div className="text-yellow-600 text-4xl animate-bounce" style={{ animationDuration: '3s', animationDelay: '1s' }}> sun</div>
-          </div>
-        </div>
+                  </div>
       </div>
     </div>
   );
