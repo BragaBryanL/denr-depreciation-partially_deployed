@@ -70,8 +70,8 @@ export default function Navbar() {
               <div className="hidden w-full h-full bg-green-700 items-center justify-center text-white font-bold text-xl">D</div>
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-white font-bold text-lg leading-tight">Department of Environment and Natural Resources</h1>
-              <p className="text-green-200 text-xs">Provincial Environment and Natural Resources Office</p>
+              <h1 className="text-white font-bold text-lg leading-tight">DENR-PENRO</h1>
+              <p className="text-green-200 text-xs">Property Depreciation System</p>
             </div>
           </div>
           <ul className="flex items-center space-x-1">
