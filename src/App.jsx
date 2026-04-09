@@ -600,8 +600,40 @@ export default function App() {
       let success = false;
       
       if (isProduction) {
-        // Production mode - update in Firebase
-        const updatedAsset = { ...asset, status: newStatus };
+        // Production mode - update in Firebase with proper data types
+        const updatedAsset = {
+          id: asset.id,
+          propertyNumber: asset.propertyNumber || '',
+          entityName: asset.entityName || '',
+          location: asset.location || '',
+          office: asset.office || '',
+          accountableOfficer: asset.accountableOfficer || '',
+          status: newStatus,
+          dateAcquired: asset.dateAcquired || '',
+          originalCost: Number(asset.originalCost) || 0,
+          current_value: Number(asset.current_value) || 0,
+          usefulLife: Number(asset.usefulLife) || 5,
+          depreciationRate: Number(asset.depreciationRate) || 0,
+          depreciableAmount: Number(asset.depreciableAmount) || 0,
+          annualDepreciation: Number(asset.annualDepreciation) || 0,
+          accumulatedDepreciation: Number(asset.accumulatedDepreciation) || 0,
+          netBookValue: Number(asset.netBookValue) || 0,
+          remarks: asset.remarks || '',
+          description: asset.description || '',
+          ppeClass: asset.ppeClass || '',
+          accountCode: asset.accountCode || '',
+          quantity: Number(asset.quantity) || 1,
+          unitCost: Number(asset.unitCost) || 0,
+          totalCost: Number(asset.totalCost) || 0,
+          residualValue: Number(asset.residualValue) || 0,
+          reference: asset.reference || '',
+          receipt: asset.receipt || '',
+          fundCluster: asset.fundCluster || '',
+          selected: false,
+          created_at: asset.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
         const result = await updateAsset(updatedAsset);
         success = result.success;
       } else {
@@ -2542,7 +2574,7 @@ export default function App() {
 
                           <td className="px-1 py-2">
 
-                            <div className="flex flex-col gap-0.5 justify-center">
+                            <div className="grid grid-cols-2 gap-0.5 justify-center max-w-[80px]">
 
                               <button onClick={() => { setEditingAsset(asset); setShowAddForm(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Edit">
 
