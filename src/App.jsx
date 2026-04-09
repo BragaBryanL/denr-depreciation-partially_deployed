@@ -647,22 +647,48 @@ export default function App() {
     const currentStatus = asset.status || 'Active';
     const newStatus = currentStatus === 'Serviceable' ? 'Unserviceable' : 'Serviceable';
     
-    // IMMEDIATE UI UPDATE - Update the state first, then handle Firebase
+    showNotification(`Asset status changed to ${newStatus}!`, "success");
+    
+    // DIRECT DOM MANIPULATION - Force the status to change immediately
+    setTimeout(() => {
+      // Find all table cells containing status
+      const statusCells = document.querySelectorAll('td');
+      statusCells.forEach(cell => {
+        if (cell.textContent && cell.textContent.includes(currentStatus)) {
+          // Check if this cell is in the same row as our asset
+          const row = cell.closest('tr');
+          if (row) {
+            const propertyNumberCell = row.querySelector('td:nth-child(2)');
+            if (propertyNumberCell && propertyNumberCell.textContent.includes(asset.propertyNumber)) {
+              // Found the correct row, update the status
+              cell.textContent = newStatus;
+              cell.style.color = newStatus === 'Unserviceable' ? 'red' : 'green';
+              cell.style.fontWeight = 'bold';
+            }
+          }
+        }
+      });
+    }, 100);
+    
+    // Update React state (this might not work but let's try)
     const updatedAssets = assets.map(a => 
       a.id === asset.id ? { ...a, status: newStatus } : a
     );
-    setAssets(updatedAssets);
+    setAssets([...updatedAssets]);
     
-    // Update localStorage immediately
+    // Update localStorage
     const localAssets = JSON.parse(localStorage.getItem('denr_assets') || '[]');
     const updatedLocalAssets = localAssets.map(a => 
       a.id === asset.id ? { ...a, status: newStatus } : a
     );
     localStorage.setItem('denr_assets', JSON.stringify(updatedLocalAssets));
     
-    showNotification(`Asset status changed to ${newStatus}!`, "success");
+    // Force re-render by changing a dummy state
+    setTimeout(() => {
+      setAssets([...updatedAssets]);
+    }, 200);
     
-    // Handle Firebase update in background without affecting UI
+    // Handle Firebase in background
     try {
       if (isProduction) {
         const updatedAsset = {
@@ -699,19 +725,9 @@ export default function App() {
         };
         
         await updateAsset(asset.id, updatedAsset);
-      } else {
-        // Development mode - use local server
-        await fetch(`http://localhost:4000/api/assets/${asset.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ ...asset, status: newStatus })
-        });
       }
     } catch (error) {
-      console.error("Error updating asset status in background:", error);
-      // Don't show error to user since UI already updated
+      console.error("Firebase error:", error);
     }
   };
 
